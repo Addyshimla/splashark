@@ -1,8 +1,12 @@
 # main.py
 from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from langgraph_bot import build_graph
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
+
 app = FastAPI()
 
 app.add_middleware(
@@ -13,8 +17,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-chat_machine = build_graph()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
+@app.get("/", response_class=FileResponse)
+async def serve_index():
+    return FileResponse("static/index.html")
+
+chat_machine = build_graph()
 
 class ChatRequest(BaseModel):
     message: str
