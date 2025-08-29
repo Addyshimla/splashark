@@ -6,78 +6,195 @@
     <title>Chat with AI</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             padding: 20px;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            background-color: #f0f4f8;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
         }
         .chat-container {
-            width: 400px;
-            height: 500px;
+            width: 450px;
+            height: 600px;
             background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             display: flex;
             flex-direction: column;
-            padding: 10px;
+            overflow: hidden;
+        }
+        .chat-header {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 18px;
         }
         .messages {
             flex-grow: 1;
             overflow-y: auto;
-            padding: 10px;
-            border-bottom: 2px solid #f0f4f8;
-            margin-bottom: 10px;
+            padding: 15px;
+            background-color: #f8f9fa;
         }
         .input-area {
             display: flex;
-            justify-content: space-between;
+            padding: 15px;
+            background-color: white;
+            border-top: 1px solid #e0e0e0;
         }
         .input-area input {
-            width: 80%;
-            padding: 10px;
-            border-radius: 5px;
+            flex-grow: 1;
+            padding: 12px 15px;
+            border-radius: 25px;
             border: 1px solid #ddd;
+            outline: none;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .input-area input:focus {
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
         }
         .input-area button {
-            padding: 10px 15px;
-            background-color: #4CAF50;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 25px;
             cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
         }
         .input-area button:hover {
-            background-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
         }
         .message {
-            margin: 5px 0;
-            padding: 8px;
-            border-radius: 5px;
-            background-color: #e9f7fe;
+            margin: 10px 0;
+            padding: 12px 15px;
+            border-radius: 15px;
+            max-width: 80%;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease-in;
         }
         .message.user {
-            background-color: #d4f1a1;
-            align-self: flex-end;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        .message.ai {
+            background-color: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            margin-right: auto;
+        }
+        .message img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            margin-top: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        .typing-indicator {
+            display: none;
+            background-color: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 15px;
+            padding: 12px 15px;
+            margin: 10px 0;
+            max-width: 80%;
+            margin-right: auto;
+        }
+        .typing-dots {
+            display: flex;
+            align-items: center;
+        }
+        .typing-dots span {
+            height: 8px;
+            width: 8px;
+            background-color: #999;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 2px;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform scale(1); opacity: 1; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .loading-image {
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(45deg, #f0f0f0, #e0e0e0);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            margin-top: 8px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
         }
     </style>
 </head>
 <body>
 
 <div class="chat-container">
+    <div class="chat-header">
+        🤖 AI Assistant
+    </div>
+    
     <div class="messages" id="messages">
-        <!-- Chat messages will be displayed here -->
+        <div class="message ai">
+            Hello! I'm your AI assistant. I can help answer questions about the platform or generate images for you. Just ask!
+        </div>
+    </div>
+
+    <div class="typing-indicator" id="typingIndicator">
+        <div class="typing-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
     </div>
 
     <div class="input-area">
-        <input type="text" id="user_input" placeholder="Type a message..." />
+        <input type="text" id="user_input" placeholder="Type a message or ask for an image..." 
+               onkeypress="handleKeyPress(event)" />
         <button onclick="sendMessage()">Send</button>
     </div>
 </div>
 
 <script>
+    function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+            sendMessage();
+        }
+    }
+
+    function showTypingIndicator() {
+        document.getElementById('typingIndicator').style.display = 'block';
+        const messagesDiv = document.getElementById('messages');
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function hideTypingIndicator() {
+        document.getElementById('typingIndicator').style.display = 'none';
+    }
+
     // Function to send the message to the backend
     async function sendMessage() {
         const userInput = document.getElementById('user_input').value;
@@ -90,24 +207,40 @@
         // Clear the input field
         document.getElementById('user_input').value = "";
 
+        // Show typing indicator
+        showTypingIndicator();
+
         try {
             // Send the message to the FastAPI backend
-            const response = await fetch('https://splashark.onrender.com/chat', {
+            const response = await fetch('http://127.0.0.1:8000/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ message: userInput }),
-                
             });
 
             const data = await response.json();
             
+            hideTypingIndicator();
             addMessage(data.response, 'ai');
         } catch (error) {
             console.error('Error:', error);
+            hideTypingIndicator();
             addMessage("Sorry, something went wrong. Please try again.", 'ai');
         }
+    }
+
+    function extractImageUrl(text) {
+        // Check for our specific IMAGE_URL format
+        if (text.startsWith('IMAGE_URL:')) {
+            return text.substring(10); // Remove 'IMAGE_URL:' prefix
+        }
+        
+        // Fallback: Look for any HTTP URL
+        const urlPattern = /(https?:\/\/[^\s]+)/i;
+        const match = text.match(urlPattern);
+        return match ? match[1] : null;
     }
 
     function addMessage(message, sender) {
@@ -116,7 +249,52 @@
         
         messageDiv.classList.add('message');
         messageDiv.classList.add(sender);
-        messageDiv.innerText = message;
+
+        // Check if this is an AI response with an image URL
+        if (sender === 'ai' && (message.startsWith('IMAGE_URL:') || message.toLowerCase().includes("here's your generated image"))) {
+            const imageUrl = extractImageUrl(message);
+            
+            if (imageUrl) {
+                // Add descriptive text
+                const textDiv = document.createElement('div');
+                textDiv.textContent = 'Here\'s your generated image:';
+                messageDiv.appendChild(textDiv);
+                
+                // Create a loading placeholder first
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'loading-image';
+                loadingDiv.textContent = 'Loading image...';
+                messageDiv.appendChild(loadingDiv);
+                
+                // Create the actual image element
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                img.alt = 'Generated image';
+                img.style.display = 'none';
+                
+                img.onload = function() {
+                    // Replace loading placeholder with actual image
+                    messageDiv.removeChild(loadingDiv);
+                    img.style.display = 'block';
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                };
+                
+                img.onerror = function() {
+                    loadingDiv.textContent = 'Failed to load image. URL: ' + imageUrl;
+                    loadingDiv.style.backgroundColor = '#ffe6e6';
+                    loadingDiv.style.color = '#d32f2f';
+                    loadingDiv.style.fontSize = '12px';
+                };
+                
+                messageDiv.appendChild(img);
+            } else {
+                // Fallback if no URL found
+                messageDiv.textContent = message;
+            }
+        } else {
+            // Regular text message
+            messageDiv.textContent = message;
+        }
         
         messagesDiv.appendChild(messageDiv);
         
