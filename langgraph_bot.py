@@ -2,13 +2,28 @@ from langgraph.graph import StateGraph, END
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+import json
+from typing_extensions import TypedDict
+from typing import List, Optional
 
 load_dotenv() 
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-class ChatState(dict):
-    pass
+# Define proper TypedDict for state management
+class ChatState(TypedDict):
+    input: str
+    device_type: Optional[str]
+    action: Optional[str]
+    edit_data: Optional[dict]
+    route: Optional[str]
+    enhanced_prompt: Optional[str]
+    image_url: Optional[str]
+    caption: Optional[str]
+    hashtags: Optional[List[str]]
+    chat_output: Optional[str]
+    output: Optional[dict]
+    error: Optional[str]
 
 from collections import namedtuple
 
@@ -31,23 +46,45 @@ faqs = [
     FAQ(id=14, question="What is a droplet?", answer="A droplet is a short story-style post that disappears after 24 hours.")
 ]
 
-def router_node(state):
+def router_node(state: ChatState) -> ChatState:
     """Router node that decides which path to take"""
+    print("="*50)
+    print("ROUTER NODE DEBUG:")
+    print(f"Full state received: {state}")
+    
     input_message = state.get("input", "")
+    action = state.get("action", "chat")
+    
+    print(f"Input message: '{input_message}'")
+    print(f"Action: {action}")
+    print("="*50)
+    
     if not isinstance(input_message, str) or not input_message.strip():
-        raise ValueError("Input message cannot be empty or non-string.")
+        raise ValueError("Input message cannot be empty or non-string")
     
-    # Check if user wants image generation
-    image_keywords = ["image", "picture", "photo", "generate", "create", "draw", "make", "post"]
-    text_lower = input_message.lower()
+    # Handle different actions
+    if action == "regenerate":
+        route = "image"
+    elif action == "edit_caption":
+        route = "edit_caption_only"
+    elif action == "edit_hashtags":
+        route = "edit_hashtags_only"
+    else:
+        # Determine route based on keywords for regular chat
+        text_lower = input_message.lower().strip()
+        image_keywords = ["image", "picture", "photo", "generate", "create", "draw", "make", "post"]
+        wants_image = any(keyword in text_lower for keyword in image_keywords)
+        route = "image" if wants_image else "chat"
     
-    # Check for image requests
-    is_image_request = any(keyword in text_lower for keyword in image_keywords)
+    print(f"Routing to: {route}")
     
-    return {"route": "image" if is_image_request else "chat", "input": input_message}
+    return {
+        **state,
+        "route": route
+    }
 
-def gpt_node(state):
-    """Handle regular chat using GPT with FAQ context"""
+def gpt_node(state: ChatState) -> ChatState:
+    """Handle chat responses using GPT"""
     input_message = state.get("input", "")
     
     faq_text = "\n".join(f"{faq.id}. {faq.question} – {faq.answer}" for faq in faqs)
@@ -66,12 +103,19 @@ def gpt_node(state):
             ]
         )
         reply = response.choices[0].message.content
-        return {"output": reply}
+        
+        return {
+            **state,
+            "output": reply
+        }
     except Exception as e:
-        return {"output": f"Error in chat: {str(e)}"}
+        return {
+            **state,
+            "output": f"Error in chat: {str(e)}"
+        }
 
-def enhance_prompt_node(state):
-    """Enhance the user's image prompt for better results"""
+def enhance_prompt_node(state: ChatState) -> ChatState:
+    """Enhance the user's prompt for better image generation"""
     input_message = state.get("input", "")
     
     enhancement_prompt = f"""
@@ -96,13 +140,20 @@ def enhance_prompt_node(state):
             messages=[{"role": "user", "content": enhancement_prompt}]
         )
         enhanced_prompt = response.choices[0].message.content
-        return {"enhanced_prompt": enhanced_prompt, "input": input_message}
+        
+        return {
+            **state,
+            "enhanced_prompt": enhanced_prompt
+        }
     except Exception as e:
-        # Fallback to original prompt if enhancement fails
-        return {"enhanced_prompt": input_message, "input": input_message}
+        return {
+            **state,
+            "enhanced_prompt": input_message,
+            "error": f"Error enhancing prompt: {str(e)}"
+        }
 
-def image_gen_node(state):
-    """Handle image generation using DALL-E with enhanced prompt"""
+def image_gen_node(state: ChatState) -> ChatState:
+    """Generate image using DALL-E 3"""
     enhanced_prompt = state.get("enhanced_prompt", state.get("input", ""))
     
     try:
@@ -110,48 +161,139 @@ def image_gen_node(state):
             model="dall-e-3",
             prompt=enhanced_prompt,
             size="1024x1024",
-            quality="hd",  # Changed to HD for better quality
+            quality="hd",
             n=1
         )
-        
+
         image_url = response.data[0].url
-        return {"output": f"IMAGE_URL:{image_url}"}
+        
+        return {
+            **state,
+            "image_url": image_url
+        }
     except Exception as e:
-        return {"output": f"Error generating image: {str(e)}"}
+        return {
+            **state,
+            "image_url": None,
+            "error": f"Error generating image: {str(e)}"
+        }
+
+def caption_hashtag_node(state: ChatState) -> ChatState:
+    """Generate caption and hashtags for the image"""
+    enhanced_prompt = state.get("enhanced_prompt", state.get("input", ""))
+
+    system_prompt = """
+    You are a social media caption and hashtag generator.
+    Based on the user's image description, create:
+    - A short, catchy caption
+    - 5-7 trending hashtags
+    
+    Respond strictly in JSON format:
+    {
+      "caption": "Your catchy caption here",
+      "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"]
+    }
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": enhanced_prompt}
+            ]
+        )
+        
+        caption_data = json.loads(response.choices[0].message.content)
+        
+        return {
+            **state,
+            "caption": caption_data.get("caption", ""),
+            "hashtags": caption_data.get("hashtags", [])
+        }
+    except Exception as e:
+        return {
+            **state,
+            "caption": "Check out this awesome image!",
+            "hashtags": ["#ai", "#generated", "#cool"],
+            "error": f"Error generating caption: {str(e)}"
+        }
+
+def final_output_node(state: ChatState) -> ChatState:
+    """Prepare the final output based on the route taken"""
+    route = state.get("route", "chat")
+    
+    if route == "chat":
+        # For chat responses, output is already set by gpt_node
+        return state
+    elif route == "image":
+        # For image responses, combine all image-related data
+        result = {}
+        
+        if state.get("image_url"):
+            result["image_url"] = state["image_url"]
+            
+        if state.get("caption"):
+            result["caption"] = state["caption"]
+            
+        if state.get("hashtags"):
+            result["hashtags"] = state["hashtags"]
+            
+        if state.get("error"):
+            result["error"] = state["error"]
+            
+        # If no image was generated successfully, provide error message
+        if not result.get("image_url"):
+            result = "Sorry, I couldn't generate the image. Please try again with a different prompt."
+        
+        return {
+            **state,
+            "output": result
+        }
+    
+    return state
 
 def build_graph():
-    builder = StateGraph(dict)
+    """Build the LangGraph workflow"""
+    builder = StateGraph(ChatState)
 
+    # Add all nodes
     builder.add_node("router", router_node)
     builder.add_node("chat", gpt_node)
     builder.add_node("enhance_prompt", enhance_prompt_node)
     builder.add_node("image_gen", image_gen_node)
+    builder.add_node("caption_hashtag", caption_hashtag_node)
+    builder.add_node("final_output", final_output_node)
 
+    # Set entry point
     builder.set_entry_point("router")
 
-    def route_decision(state):
-        return state.get("route", "chat")
+    # Define routing logic
+    def route_decision(state: ChatState) -> str:
+        route = state.get("route", "chat")
+        print(f"Route decision: {route}")
+        return route
 
+    # Add conditional edges from router
     builder.add_conditional_edges(
         "router",
         route_decision,
-        {"chat": "chat", "image": "enhance_prompt"}
+        {
+            "chat": "chat",
+            "image": "enhance_prompt"
+        }
     )
 
-    builder.add_edge("chat", END)
-    
+    # Chat flow - simple path to end
+    builder.add_edge("chat", "final_output")
+
+    # Image flow - enhanced prompt -> image generation -> caption -> final output
     builder.add_edge("enhance_prompt", "image_gen")
-    builder.add_edge("image_gen", END)
+    builder.add_edge("image_gen", "caption_hashtag")
+    builder.add_edge("caption_hashtag", "final_output")
+
+    # All paths end at final_output, then END
+    builder.add_edge("final_output", END)
 
     return builder.compile()
 
-if __name__ == "__main__":
-    graph = build_graph()
-    
-    # Test with image request
-    result = graph.invoke({"input": "create a image of dog"})
-    print(result["output"])
-    
-    # Test with regular chat
-    result = graph.invoke({"input": "How do I update my password?"})
-    print(result["output"])
